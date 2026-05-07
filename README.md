@@ -8,7 +8,7 @@ This project was built on a Windows machine using WSL Ubuntu and an NVIDIA GeFor
 
 ## Demo
 
-![CUDA Ops Dashboard demo](assets/cuda-dashboard-demo.gif)
+![CUDA Ops Dashboard demo](assets/cuda.gif)
 
 ## Why This Project Exists
 
