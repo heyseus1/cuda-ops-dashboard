@@ -5,5 +5,11 @@ __pycache__/
 .DS_Store
 node_modules/
 dist/
-cuda_labs/**/vector_add
+
+# CUDA build artifacts
 cuda_labs/**/*.o
+cuda_labs/**/*.out
+cuda_labs/**/build/
+
+# Compiled CUDA lab binaries
+/cuda_labs/vector_add/vector_add
