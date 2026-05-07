@@ -6,6 +6,10 @@ This project was built on a Windows machine using WSL Ubuntu and an NVIDIA GeFor
 
 ---
 
+## Demo
+
+![CUDA Ops Dashboard demo](assets/cuda-dashboard-demo.gif)
+
 ## Why This Project Exists
 
 Modern AI and infrastructure roles increasingly require practical experience with GPU-backed workloads. This project is designed to demonstrate hands-on understanding of:
