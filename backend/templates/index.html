@@ -5,29 +5,227 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
   <main>
     <header>
       <div>
         <p class="eyebrow">RTX 3090 Local GPU Lab</p>
         <h1>CUDA Ops Dashboard</h1>
-        <p class="sub">Live GPU telemetry, CUDA workload testing, and infra-style observability.</p>
+        <p class="sub">
+          Live GPU telemetry, CUDA workload testing, process monitoring, and infra-style observability.
+        </p>
       </div>
-      <button onclick="runBenchmark()">Run GPU Benchmark</button>
     </header>
 
-    <section class="grid">
-      <div class="card"><span>GPU</span><strong id="gpu">Loading...</strong></div>
-      <div class="card"><span>Utilization</span><strong id="util">0%</strong></div>
-      <div class="card"><span>VRAM</span><strong id="vram">0 MB</strong></div>
-      <div class="card"><span>Temperature</span><strong id="temp">0°C</strong></div>
-      <div class="card"><span>Power</span><strong id="power">0W</strong></div>
-      <div class="card"><span>Benchmark</span><strong id="bench">Idle</strong></div>
+    <nav class="tabs">
+      <button class="tab-button active" id="dashboardTabButton" onclick="setTab('dashboard')">
+        Dashboard
+      </button>
+      <button class="tab-button" id="processTabButton" onclick="setTab('process')">
+        Process Monitor
+      </button>
+    </nav>
+
+    <section id="dashboardTab" class="tab-content active">
+      <section class="grid">
+        <div class="card">
+          <span>GPU</span>
+          <strong id="gpu">Loading...</strong>
+        </div>
+
+        <div class="card">
+          <span>CUDA</span>
+          <strong id="cudaStatus">Checking...</strong>
+        </div>
+
+        <div class="card">
+          <span>Benchmark Status</span>
+          <strong id="bench">Idle</strong>
+        </div>
+
+        <div class="card">
+          <span>GPU Utilization</span>
+          <strong id="util">0%</strong>
+        </div>
+
+        <div class="card">
+          <span>VRAM Used</span>
+          <strong id="vram">0 MB</strong>
+        </div>
+
+        <div class="card">
+          <span>VRAM Free</span>
+          <strong id="vramFree">0 MB</strong>
+        </div>
+
+        <div class="card">
+          <span>Temperature</span>
+          <strong id="temp">0°C</strong>
+        </div>
+
+        <div class="card">
+          <span>Power</span>
+          <strong id="power">0W</strong>
+        </div>
+
+        <div class="card">
+          <span>Power Headroom</span>
+          <strong id="powerHeadroom">N/A</strong>
+        </div>
+
+        <div class="card">
+          <span>Graphics Clock</span>
+          <strong id="graphicsClockLive">N/A</strong>
+        </div>
+
+        <div class="card">
+          <span>Memory Clock</span>
+          <strong id="memoryClockLive">N/A</strong>
+        </div>
+
+        <div class="card">
+          <span>Active GPU Processes</span>
+          <strong id="activeProcesses">0</strong>
+        </div>
+      </section>
+
+      <section class="control-panel">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Benchmark Console</p>
+              <h2>CUDA Workload Controls</h2>
+            </div>
+          </div>
+
+          <div class="controls">
+            <label>
+              Matrix Size
+              <input id="matrixSize" type="number" min="512" max="16000" step="512" value="8000">
+            </label>
+
+            <label>
+              Iterations
+              <input id="iterations" type="number" min="1" max="250" step="1" value="25">
+            </label>
+
+            <button id="startButton" onclick="startBenchmark()">Start Benchmark</button>
+            <button id="stopButton" class="danger" onclick="stopBenchmark()">Stop Benchmark</button>
+          </div>
+
+          <div class="status-grid">
+            <div>
+              <span>Completed</span>
+              <strong id="completed">0 / 0</strong>
+            </div>
+
+            <div>
+              <span>Progress</span>
+              <strong id="progress">0%</strong>
+            </div>
+
+            <div>
+              <span>Last Iteration</span>
+              <strong id="lastSeconds">N/A</strong>
+            </div>
+
+            <div>
+              <span>Total Time</span>
+              <strong id="totalSeconds">N/A</strong>
+            </div>
+          </div>
+
+          <div class="progress-track">
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+
+          <pre id="console" class="console">Waiting for benchmark...</pre>
+        </div>
+      </section>
+
+      <section class="charts quad">
+        <div class="panel">
+          <h2>GPU Utilization</h2>
+          <canvas id="utilChart"></canvas>
+        </div>
+
+        <div class="panel">
+          <h2>VRAM Usage</h2>
+          <canvas id="memChart"></canvas>
+        </div>
+
+        <div class="panel">
+          <h2>Temperature</h2>
+          <canvas id="tempChart"></canvas>
+        </div>
+
+        <div class="panel">
+          <h2>Power Usage</h2>
+          <canvas id="powerChart"></canvas>
+        </div>
+      </section>
     </section>
 
-    <section class="charts">
-      <div class="panel"><canvas id="utilChart"></canvas></div>
-      <div class="panel"><canvas id="memChart"></canvas></div>
+    <section id="processTab" class="tab-content">
+      <section class="device-layout">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Device Info</p>
+              <h2>NVIDIA Runtime Details</h2>
+            </div>
+            <button onclick="refreshProcessMonitor()">Refresh</button>
+          </div>
+
+          <div class="device-grid">
+            <div><span>GPU</span><strong id="deviceGpu">Loading...</strong></div>
+            <div><span>Driver Version</span><strong id="driverVersion">N/A</strong></div>
+            <div><span>CUDA Driver</span><strong id="cudaDriver">N/A</strong></div>
+            <div><span>PyTorch CUDA</span><strong id="pytorchCuda">N/A</strong></div>
+            <div><span>Compute Capability</span><strong id="computeCapability">N/A</strong></div>
+            <div><span>Performance State</span><strong id="performanceState">N/A</strong></div>
+            <div><span>Graphics Clock</span><strong id="graphicsClock">N/A</strong></div>
+            <div><span>SM Clock</span><strong id="smClock">N/A</strong></div>
+            <div><span>Memory Clock</span><strong id="memoryClock">N/A</strong></div>
+            <div><span>Fan Speed</span><strong id="fanSpeed">N/A</strong></div>
+            <div><span>Power Limit</span><strong id="powerLimit">N/A</strong></div>
+            <div><span>Active GPU Processes</span><strong id="processCount">0</strong></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">GPU Process Monitor</p>
+              <h2>Active GPU Consumers</h2>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>PID</th>
+                  <th>Type</th>
+                  <th>Process</th>
+                  <th>GPU Memory</th>
+                  <th>Command</th>
+                </tr>
+              </thead>
+              <tbody id="processTableBody">
+                <tr>
+                  <td colspan="5">Loading GPU processes...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="note">
+            WSL can expose Windows-side GPU consumers through NVML, but those processes may not map cleanly to Linux /proc.
+          </p>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -35,64 +233,273 @@
 const labels = [];
 const utilData = [];
 const memData = [];
+const tempData = [];
+const powerData = [];
 
-function makeChart(id, label) {
+let activeTab = "dashboard";
+
+function setTab(tabName) {
+  activeTab = tabName;
+
+  document.getElementById("dashboardTab").classList.remove("active");
+  document.getElementById("processTab").classList.remove("active");
+  document.getElementById("dashboardTabButton").classList.remove("active");
+  document.getElementById("processTabButton").classList.remove("active");
+
+  if (tabName === "dashboard") {
+    document.getElementById("dashboardTab").classList.add("active");
+    document.getElementById("dashboardTabButton").classList.add("active");
+  }
+
+  if (tabName === "process") {
+    document.getElementById("processTab").classList.add("active");
+    document.getElementById("processTabButton").classList.add("active");
+    refreshProcessMonitor();
+  }
+}
+
+function makeChart(id, label, dataRef, yMax = 100) {
   return new Chart(document.getElementById(id), {
     type: "line",
     data: {
-      labels,
-      datasets: [{ label, data: id === "utilChart" ? utilData : memData, tension: 0.35 }]
+      labels: labels,
+      datasets: [
+        {
+          label: label,
+          data: dataRef,
+          tension: 0.35,
+          borderWidth: 2,
+          pointRadius: 0
+        }
+      ]
     },
     options: {
       animation: false,
-      scales: { y: { min: 0, max: 100 } },
-      plugins: { legend: { labels: { color: "#e5e7eb" } } }
+      responsive: true,
+      scales: {
+        x: {
+          ticks: { color: "#94a3b8" },
+          grid: { color: "rgba(148, 163, 184, 0.12)" }
+        },
+        y: {
+          min: 0,
+          max: yMax,
+          ticks: { color: "#94a3b8" },
+          grid: { color: "rgba(148, 163, 184, 0.12)" }
+        }
+      },
+      plugins: {
+        legend: {
+          labels: { color: "#e5e7eb" }
+        }
+      }
     }
   });
 }
 
-const utilChart = makeChart("utilChart", "GPU Utilization %");
-const memChart = makeChart("memChart", "VRAM Usage %");
+const utilChart = makeChart("utilChart", "GPU Utilization %", utilData, 100);
+const memChart = makeChart("memChart", "VRAM Usage %", memData, 100);
+const tempChart = makeChart("tempChart", "Temperature °C", tempData, 100);
+const powerChart = makeChart("powerChart", "Power % of Limit", powerData, 100);
+
+function benchmarkLabel(benchmark) {
+  if (benchmark.status === "running") return "Running";
+  if (benchmark.status === "stopping") return "Stopping";
+  if (benchmark.status === "completed") return "Completed";
+  if (benchmark.status === "stopped") return "Stopped";
+  if (benchmark.status === "error") return "Error";
+  return "Idle";
+}
+
+function displayValue(value, suffix = "") {
+  if (value === null || value === undefined || value === "") {
+    return "N/A";
+  }
+
+  if (Array.isArray(value)) {
+    return value.join(".");
+  }
+
+  return `${value}${suffix}`;
+}
+
+function updateBenchmarkConsole(benchmark) {
+  document.getElementById("bench").textContent = benchmarkLabel(benchmark);
+
+  const completed = benchmark.completed_iterations || 0;
+  const total = benchmark.total_iterations || 0;
+  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  document.getElementById("completed").textContent = `${completed} / ${total}`;
+  document.getElementById("progress").textContent = `${progress}%`;
+  document.getElementById("progressBar").style.width = `${progress}%`;
+
+  document.getElementById("lastSeconds").textContent =
+    benchmark.last_seconds ? `${benchmark.last_seconds}s` : "N/A";
+
+  document.getElementById("totalSeconds").textContent =
+    benchmark.total_seconds ? `${benchmark.total_seconds}s` : "N/A";
+
+  const consoleBox = document.getElementById("console");
+
+  if (benchmark.logs && benchmark.logs.length > 0) {
+    consoleBox.textContent = benchmark.logs.join("\n");
+  } else {
+    consoleBox.textContent = "Waiting for benchmark...";
+  }
+
+  consoleBox.scrollTop = consoleBox.scrollHeight;
+
+  document.getElementById("startButton").disabled = benchmark.running;
+  document.getElementById("stopButton").disabled = !benchmark.running;
+}
 
 async function refreshMetrics() {
   const res = await fetch("/gpu/metrics");
   const m = await res.json();
 
   document.getElementById("gpu").textContent = m.gpu;
+  document.getElementById("cudaStatus").textContent = m.cuda_available ? "Available" : "Unavailable";
   document.getElementById("util").textContent = `${m.utilization_percent}%`;
-  document.getElementById("vram").textContent = `${m.memory_used_mb} / ${m.memory_total_mb} MB`;
-  document.getElementById("temp").textContent = `${m.temperature_c}°C`;
-  document.getElementById("power").textContent = `${m.power_watts}W`;
 
-  const b = m.benchmark;
-  document.getElementById("bench").textContent =
-    b.running ? "Running..." :
-    b.last_error ? "Error" :
-    b.last_seconds ? `${b.last_seconds}s` :
-    "Idle";
+  document.getElementById("vram").textContent =
+    `${m.memory_used_mb} / ${m.memory_total_mb} MB`;
+
+  document.getElementById("vramFree").textContent =
+    displayValue(m.memory_free_mb, " MB");
+
+  document.getElementById("temp").textContent = `${m.temperature_c}°C`;
+
+  document.getElementById("power").textContent =
+    m.power_limit_watts
+      ? `${m.power_watts} / ${m.power_limit_watts} W`
+      : `${m.power_watts} W`;
+
+  document.getElementById("powerHeadroom").textContent =
+    displayValue(m.power_headroom_watts, " W");
+
+  document.getElementById("graphicsClockLive").textContent =
+    displayValue(m.graphics_clock_mhz, " MHz");
+
+  document.getElementById("memoryClockLive").textContent =
+    displayValue(m.memory_clock_mhz, " MHz");
+
+  document.getElementById("activeProcesses").textContent =
+    displayValue(m.active_process_count);
+
+  updateBenchmarkConsole(m.benchmark);
 
   const now = new Date().toLocaleTimeString();
 
   labels.push(now);
   utilData.push(m.utilization_percent);
   memData.push(m.memory_percent);
+  tempData.push(m.temperature_c);
+  powerData.push(m.power_percent || 0);
 
-  if (labels.length > 30) {
+  if (labels.length > 45) {
     labels.shift();
     utilData.shift();
     memData.shift();
+    tempData.shift();
+    powerData.shift();
   }
 
   utilChart.update();
   memChart.update();
+  tempChart.update();
+  powerChart.update();
 }
 
-async function runBenchmark() {
-  await fetch("/gpu/benchmark?size=12000", { method: "POST" });
+async function startBenchmark() {
+  const size = document.getElementById("matrixSize").value;
+  const iterations = document.getElementById("iterations").value;
+
+  await fetch(`/gpu/benchmark/start?size=${size}&iterations=${iterations}`, {
+    method: "POST"
+  });
+
+  await refreshMetrics();
+  await refreshProcessMonitor();
+}
+
+async function stopBenchmark() {
+  await fetch("/gpu/benchmark/stop", {
+    method: "POST"
+  });
+
+  await refreshMetrics();
+  await refreshProcessMonitor();
+}
+
+async function refreshDeviceInfo() {
+  const res = await fetch("/gpu/device-info");
+  const info = await res.json();
+
+  document.getElementById("deviceGpu").textContent = displayValue(info.gpu);
+  document.getElementById("driverVersion").textContent = displayValue(info.driver_version);
+  document.getElementById("cudaDriver").textContent = displayValue(info.cuda_driver_version);
+  document.getElementById("pytorchCuda").textContent = displayValue(info.pytorch_cuda_version);
+  document.getElementById("computeCapability").textContent = displayValue(info.compute_capability);
+  document.getElementById("performanceState").textContent = displayValue(info.performance_state);
+  document.getElementById("graphicsClock").textContent = displayValue(info.graphics_clock_mhz, " MHz");
+  document.getElementById("smClock").textContent = displayValue(info.sm_clock_mhz, " MHz");
+  document.getElementById("memoryClock").textContent = displayValue(info.memory_clock_mhz, " MHz");
+  document.getElementById("fanSpeed").textContent = displayValue(info.fan_speed_percent, "%");
+  document.getElementById("powerLimit").textContent = displayValue(info.power_limit_watts, " W");
+}
+
+async function refreshProcesses() {
+  const res = await fetch("/gpu/processes");
+  const data = await res.json();
+
+  document.getElementById("processCount").textContent = data.count;
+
+  const tbody = document.getElementById("processTableBody");
+  tbody.innerHTML = "";
+
+  if (!data.processes || data.processes.length === 0) {
+    const row = document.createElement("tr");
+    row.innerHTML = `<td colspan="5">No active GPU processes detected.</td>`;
+    tbody.appendChild(row);
+    return;
+  }
+
+  for (const process of data.processes) {
+    const row = document.createElement("tr");
+
+    const types = process.types ? process.types.join(", ") : "unknown";
+    const memory = process.used_memory_mb !== null && process.used_memory_mb !== undefined
+      ? `${process.used_memory_mb} MB`
+      : "N/A";
+
+    row.innerHTML = `
+      <td>${process.pid}</td>
+      <td><span class="pill">${types}</span></td>
+      <td>${process.name || "unknown"}</td>
+      <td>${memory}</td>
+      <td class="command">${process.command || "N/A"}</td>
+    `;
+
+    tbody.appendChild(row);
+  }
+}
+
+async function refreshProcessMonitor() {
+  await refreshDeviceInfo();
+  await refreshProcesses();
 }
 
 setInterval(refreshMetrics, 1000);
+
+setInterval(() => {
+  if (activeTab === "process") {
+    refreshProcessMonitor();
+  }
+}, 2000);
+
 refreshMetrics();
+refreshProcessMonitor();
 </script>
 </body>
 </html>
