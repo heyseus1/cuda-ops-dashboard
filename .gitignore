@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 node_modules/
 dist/
+cuda_labs/**/vector_add
+cuda_labs/**/*.o

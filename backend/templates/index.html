@@ -13,7 +13,8 @@
         <p class="eyebrow">RTX 3090 Local GPU Lab</p>
         <h1>CUDA Ops Dashboard</h1>
         <p class="sub">
-          Live GPU telemetry, CUDA workload testing, process monitoring, and infra-style observability.
+          Live GPU telemetry, CUDA workload testing, process monitoring, custom CUDA kernel execution,
+          and infra-style observability.
         </p>
       </div>
     </header>
@@ -22,8 +23,13 @@
       <button class="tab-button active" id="dashboardTabButton" onclick="setTab('dashboard')">
         Dashboard
       </button>
+
       <button class="tab-button" id="processTabButton" onclick="setTab('process')">
         Process Monitor
+      </button>
+
+      <button class="tab-button" id="kernelTabButton" onclick="setTab('kernel')">
+        CUDA Kernel Lab
       </button>
     </nav>
 
@@ -175,6 +181,7 @@
               <p class="eyebrow">Device Info</p>
               <h2>NVIDIA Runtime Details</h2>
             </div>
+
             <button onclick="refreshProcessMonitor()">Refresh</button>
           </div>
 
@@ -213,6 +220,7 @@
                   <th>Command</th>
                 </tr>
               </thead>
+
               <tbody id="processTableBody">
                 <tr>
                   <td colspan="5">Loading GPU processes...</td>
@@ -222,8 +230,109 @@
           </div>
 
           <p class="note">
-            WSL can expose Windows-side GPU consumers through NVML, but those processes may not map cleanly to Linux /proc.
+            WSL can expose Windows-side GPU consumers through NVML, but those processes may not map cleanly to Linux
+            <code>/proc</code>. WSL CUDA processes should usually show cleaner process names and commands.
           </p>
+        </div>
+      </section>
+    </section>
+
+    <section id="kernelTab" class="tab-content">
+      <section class="device-layout">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">CUDA Kernel Lab</p>
+              <h2>Vector Add Kernel</h2>
+            </div>
+          </div>
+
+          <p class="note">
+            This lab runs a custom CUDA C++ kernel that adds two arrays together on the GPU.
+            Each GPU thread computes one output element.
+          </p>
+
+          <div class="insight-panel">
+            <p class="eyebrow">Human Summary</p>
+            <h3 id="vectorHumanTitle">Ready to run a custom CUDA kernel</h3>
+            <p id="vectorHumanMessage">
+              Run the Vector Add lab to turn your CUDA code into something measurable.
+              The dashboard will explain what the result means in plain English.
+            </p>
+
+            <ul id="vectorHumanBullets" class="insight-list">
+              <li>This lab runs GPU code you wrote in CUDA C++.</li>
+              <li>Each CUDA thread is responsible for adding one array element.</li>
+              <li>The result is verified for correctness after the GPU finishes.</li>
+            </ul>
+          </div>
+
+          <div class="controls kernel-controls">
+            <label>
+              Elements
+              <input id="vectorElements" type="number" min="1024" max="134217728" step="1024" value="16777216">
+            </label>
+
+            <label>
+              Threads Per Block
+              <input id="vectorThreads" type="number" min="32" max="1024" step="32" value="256">
+            </label>
+
+            <label>
+              Iterations
+              <input id="vectorIterations" type="number" min="1" max="10000" step="1" value="100">
+            </label>
+
+            <button id="runVectorAddButton" onclick="runVectorAddLab()">
+              Run Vector Add
+            </button>
+          </div>
+
+          <div class="status-grid">
+            <div>
+              <span>Status</span>
+              <strong id="vectorStatus">Idle</strong>
+            </div>
+
+            <div>
+              <span>Passed</span>
+              <strong id="vectorPassed">N/A</strong>
+            </div>
+
+            <div>
+              <span>Average Kernel Time</span>
+              <strong id="vectorAvgMs">N/A</strong>
+            </div>
+
+            <div>
+              <span>Wall Time</span>
+              <strong id="vectorWallTime">N/A</strong>
+            </div>
+          </div>
+
+          <div class="status-grid">
+            <div>
+              <span>Elements</span>
+              <strong id="vectorResultElements">N/A</strong>
+            </div>
+
+            <div>
+              <span>Blocks</span>
+              <strong id="vectorBlocks">N/A</strong>
+            </div>
+
+            <div>
+              <span>Threads / Block</span>
+              <strong id="vectorThreadsResult">N/A</strong>
+            </div>
+
+            <div>
+              <span>Max Error</span>
+              <strong id="vectorMaxError">N/A</strong>
+            </div>
+          </div>
+
+          <pre id="vectorOutput" class="console">Waiting to run CUDA vector add lab...</pre>
         </div>
       </section>
     </section>
@@ -243,8 +352,11 @@ function setTab(tabName) {
 
   document.getElementById("dashboardTab").classList.remove("active");
   document.getElementById("processTab").classList.remove("active");
+  document.getElementById("kernelTab").classList.remove("active");
+
   document.getElementById("dashboardTabButton").classList.remove("active");
   document.getElementById("processTabButton").classList.remove("active");
+  document.getElementById("kernelTabButton").classList.remove("active");
 
   if (tabName === "dashboard") {
     document.getElementById("dashboardTab").classList.add("active");
@@ -255,6 +367,11 @@ function setTab(tabName) {
     document.getElementById("processTab").classList.add("active");
     document.getElementById("processTabButton").classList.add("active");
     refreshProcessMonitor();
+  }
+
+  if (tabName === "kernel") {
+    document.getElementById("kernelTab").classList.add("active");
+    document.getElementById("kernelTabButton").classList.add("active");
   }
 }
 
@@ -321,6 +438,14 @@ function displayValue(value, suffix = "") {
   }
 
   return `${value}${suffix}`;
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined || value === "") {
+    return "N/A";
+  }
+
+  return Number(value).toLocaleString();
 }
 
 function updateBenchmarkConsole(benchmark) {
@@ -488,6 +613,187 @@ async function refreshProcesses() {
 async function refreshProcessMonitor() {
   await refreshDeviceInfo();
   await refreshProcesses();
+}
+
+function updateVectorHumanSummary(data) {
+  const title = document.getElementById("vectorHumanTitle");
+  const message = document.getElementById("vectorHumanMessage");
+  const bullets = document.getElementById("vectorHumanBullets");
+
+  const result = data.result || {};
+
+  if (data.status === "build_required") {
+    title.textContent = "CUDA binary needs to be built first";
+    message.textContent = data.message || "The vector_add executable was not found.";
+
+    bullets.innerHTML = `
+      <li>The UI is wired correctly, but the compiled CUDA binary is missing.</li>
+      <li>Build the lab from <code>cuda_labs/vector_add</code> using <code>make</code>.</li>
+      <li>Compiled binaries should stay out of Git because they are machine-specific build artifacts.</li>
+    `;
+    return;
+  }
+
+  if (data.status === "invalid_request") {
+    title.textContent = "Input validation blocked the run";
+    message.textContent = data.message || "One of the requested values was outside the safe range.";
+
+    bullets.innerHTML = `
+      <li>The backend rejected the request before launching GPU work.</li>
+      <li>This prevents accidental oversized workloads from consuming too much GPU memory.</li>
+      <li>Try reducing elements, threads per block, or iterations.</li>
+    `;
+    return;
+  }
+
+  if (data.status === "timeout") {
+    title.textContent = "The CUDA lab timed out";
+    message.textContent = data.message || "The lab took longer than the configured timeout.";
+
+    bullets.innerHTML = `
+      <li>The process was stopped because it exceeded the safe runtime window.</li>
+      <li>This protects the dashboard from hanging on long-running GPU work.</li>
+      <li>Try fewer elements or fewer iterations.</li>
+    `;
+    return;
+  }
+
+  if (data.status === "error" || data.status === "parse_error" || data.status === "failed") {
+    title.textContent = "The CUDA lab did not complete successfully";
+    message.textContent = data.message || "The CUDA binary returned an error or produced unexpected output.";
+
+    bullets.innerHTML = `
+      <li>Check the raw output console below for stderr/stdout details.</li>
+      <li>This could be a CUDA runtime issue, invalid binary, or unexpected program output.</li>
+      <li>The dashboard captured the failure instead of crashing the web server.</li>
+    `;
+    return;
+  }
+
+  if (data.passed === true && result.passed === true) {
+    const elements = result.elements || 0;
+    const blocks = result.blocks || 0;
+    const threadsPerBlock = result.threads_per_block || 0;
+    const totalThreads = blocks * threadsPerBlock;
+    const avgMs = result.avg_kernel_ms;
+    const wallSeconds = data.wall_seconds;
+    const maxError = result.max_error;
+
+    title.textContent = "CUDA kernel passed correctness validation";
+
+    message.textContent =
+      `Your GPU correctly added ${formatNumber(elements)} elements using a custom CUDA C++ kernel. ` +
+      `The average GPU kernel execution time was ${avgMs} ms.`;
+
+    bullets.innerHTML = `
+      <li>The program launched ${formatNumber(blocks)} CUDA blocks with ${formatNumber(threadsPerBlock)} threads per block.</li>
+      <li>That equals ${formatNumber(totalThreads)} logical CUDA threads scheduled for this workload.</li>
+      <li>Each thread computed one output element: <code>c[i] = a[i] + b[i]</code>.</li>
+      <li>The max error was ${maxError}, so the GPU result matched the expected value.</li>
+      <li>Kernel time measures GPU execution. Wall time was ${wallSeconds}s because it also includes process startup, memory allocation, CPU/GPU copies, and JSON parsing.</li>
+    `;
+    return;
+  }
+
+  title.textContent = "CUDA lab finished with an unknown result";
+  message.textContent = "The lab returned data, but the dashboard could not classify the result clearly.";
+
+  bullets.innerHTML = `
+    <li>Review the raw JSON output below.</li>
+    <li>The backend successfully captured the lab response.</li>
+    <li>You may need to adjust the parser if the CUDA program output changed.</li>
+  `;
+}
+
+async function runVectorAddLab() {
+  const elements = document.getElementById("vectorElements").value;
+  const threads = document.getElementById("vectorThreads").value;
+  const iterations = document.getElementById("vectorIterations").value;
+
+  const button = document.getElementById("runVectorAddButton");
+
+  button.disabled = true;
+
+  document.getElementById("vectorStatus").textContent = "Running";
+  document.getElementById("vectorPassed").textContent = "N/A";
+  document.getElementById("vectorAvgMs").textContent = "N/A";
+  document.getElementById("vectorWallTime").textContent = "N/A";
+  document.getElementById("vectorResultElements").textContent = "N/A";
+  document.getElementById("vectorBlocks").textContent = "N/A";
+  document.getElementById("vectorThreadsResult").textContent = "N/A";
+  document.getElementById("vectorMaxError").textContent = "N/A";
+
+  document.getElementById("vectorOutput").textContent =
+    "Running custom CUDA C++ vector_add kernel...";
+
+  document.getElementById("vectorHumanTitle").textContent = "Running CUDA kernel";
+  document.getElementById("vectorHumanMessage").textContent =
+    "The dashboard is executing the compiled vector_add CUDA binary and waiting for the GPU result.";
+
+  document.getElementById("vectorHumanBullets").innerHTML = `
+    <li>The backend is launching a local CUDA C++ executable.</li>
+    <li>The CUDA program will allocate GPU memory, run the kernel, copy results back, and verify correctness.</li>
+    <li>After completion, this panel will explain the result in plain English.</li>
+  `;
+
+  try {
+    const res = await fetch(
+      `/cuda-labs/vector-add/run?elements=${elements}&threads_per_block=${threads}&iterations=${iterations}`,
+      {
+        method: "POST"
+      }
+    );
+
+    const data = await res.json();
+    const result = data.result || {};
+
+    updateVectorHumanSummary(data);
+
+    document.getElementById("vectorStatus").textContent = data.status || "unknown";
+
+    document.getElementById("vectorPassed").textContent =
+      data.passed === true ? "true" : data.passed === false ? "false" : "N/A";
+
+    document.getElementById("vectorAvgMs").textContent =
+      result.avg_kernel_ms !== undefined ? `${result.avg_kernel_ms} ms` : "N/A";
+
+    document.getElementById("vectorWallTime").textContent =
+      data.wall_seconds !== undefined ? `${data.wall_seconds}s` : "N/A";
+
+    document.getElementById("vectorResultElements").textContent =
+      result.elements !== undefined ? formatNumber(result.elements) : "N/A";
+
+    document.getElementById("vectorBlocks").textContent =
+      result.blocks !== undefined ? formatNumber(result.blocks) : "N/A";
+
+    document.getElementById("vectorThreadsResult").textContent =
+      result.threads_per_block !== undefined ? formatNumber(result.threads_per_block) : "N/A";
+
+    document.getElementById("vectorMaxError").textContent =
+      result.max_error !== undefined ? result.max_error : "N/A";
+
+    document.getElementById("vectorOutput").textContent =
+      JSON.stringify(data, null, 2);
+
+    await refreshMetrics();
+    await refreshProcessMonitor();
+
+  } catch (error) {
+    document.getElementById("vectorStatus").textContent = "error";
+    document.getElementById("vectorOutput").textContent = error.toString();
+
+    document.getElementById("vectorHumanTitle").textContent = "Browser request failed";
+    document.getElementById("vectorHumanMessage").textContent =
+      "The frontend could not complete the request to the FastAPI backend.";
+
+    document.getElementById("vectorHumanBullets").innerHTML = `
+      <li>Confirm the FastAPI server is still running.</li>
+      <li>Check the browser console and Uvicorn logs.</li>
+      <li>The CUDA binary may be fine; this error happened at the web request layer.</li>
+    `;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 setInterval(refreshMetrics, 1000);
