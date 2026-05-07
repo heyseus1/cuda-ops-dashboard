@@ -1,26 +1,31 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from backend.services.benchmark_runner import BenchmarkRunner
-from backend.services.gpu_monitor import GpuMonitor
 from backend.services.cuda_lab_runner import CudaLabRunner
+from backend.services.gpu_monitor import GpuMonitor
+from backend.services.visual_lab_runner import VisualLabRunner
 
 
 app = FastAPI(title="CUDA Ops Dashboard")
 
-app.mount("/static", StaticFiles(directory="backend/static"), name="static")
-templates = Jinja2Templates(directory="backend/templates")
+base_dir = Path(__file__).resolve().parent
 
+app.mount("/static", StaticFiles(directory=base_dir / "static"), name="static")
+templates = Jinja2Templates(directory=str(base_dir / "templates"))
 
-gpu_monitor = GpuMonitor(gpu_index=0)
+gpu_monitor = GpuMonitor()
 benchmark_runner = BenchmarkRunner()
 cuda_lab_runner = CudaLabRunner()
+visual_lab_runner = VisualLabRunner()
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request):
+def index(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -45,32 +50,27 @@ def gpu_processes():
 
 
 @app.get("/gpu/benchmark/status")
-def benchmark_status():
+def gpu_benchmark_status():
     return benchmark_runner.get_status()
 
-@app.get("/cuda-labs/vector-add/info")
-def vector_add_info():
-    return cuda_lab_runner.get_vector_add_info()
 
 @app.post("/gpu/benchmark/start")
-def start_benchmark(
-    size: int = Query(
-        default=8000,
-        ge=BenchmarkRunner.MIN_MATRIX_SIZE,
-        le=BenchmarkRunner.MAX_MATRIX_SIZE,
-    ),
-    iterations: int = Query(
-        default=25,
-        ge=BenchmarkRunner.MIN_ITERATIONS,
-        le=BenchmarkRunner.MAX_ITERATIONS,
-    ),
+def gpu_benchmark_start(
+    size: int = Query(default=8000, ge=512, le=16000),
+    iterations: int = Query(default=25, ge=1, le=250),
 ):
     return benchmark_runner.start(size=size, iterations=iterations)
 
 
 @app.post("/gpu/benchmark/stop")
-def stop_benchmark():
+def gpu_benchmark_stop():
     return benchmark_runner.stop()
+
+
+@app.get("/cuda-labs/vector-add/info")
+def vector_add_info():
+    return cuda_lab_runner.get_vector_add_info()
+
 
 @app.post("/cuda-labs/vector-add/run")
 def run_vector_add_lab(
@@ -94,4 +94,69 @@ def run_vector_add_lab(
         elements=elements,
         threads_per_block=threads_per_block,
         iterations=iterations,
+    )
+
+
+@app.get("/cuda-visual/status")
+def cuda_visual_status():
+    return visual_lab_runner.status()
+
+
+@app.post("/cuda-visual/start")
+def cuda_visual_start(
+    width: int = Query(
+        default=960,
+        ge=VisualLabRunner.MIN_WIDTH,
+        le=VisualLabRunner.MAX_WIDTH,
+    ),
+    height: int = Query(
+        default=540,
+        ge=VisualLabRunner.MIN_HEIGHT,
+        le=VisualLabRunner.MAX_HEIGHT,
+    ),
+    max_iterations: int = Query(
+        default=500,
+        ge=VisualLabRunner.MIN_ITERATIONS,
+        le=VisualLabRunner.MAX_ITERATIONS,
+    ),
+    zoom_multiplier: float = Query(
+        default=1.08,
+        ge=VisualLabRunner.MIN_ZOOM_MULTIPLIER,
+        le=VisualLabRunner.MAX_ZOOM_MULTIPLIER,
+    ),
+    interval_ms: int = Query(
+        default=750,
+        ge=VisualLabRunner.MIN_INTERVAL_MS,
+        le=VisualLabRunner.MAX_INTERVAL_MS,
+    ),
+):
+    return visual_lab_runner.start(
+        width=width,
+        height=height,
+        max_iterations=max_iterations,
+        zoom_multiplier=zoom_multiplier,
+        interval_ms=interval_ms,
+    )
+
+
+@app.post("/cuda-visual/stop")
+def cuda_visual_stop():
+    return visual_lab_runner.stop()
+
+
+@app.get("/cuda-visual/latest-image")
+def cuda_visual_latest_image():
+    if not visual_lab_runner.latest_image_path.exists():
+        return JSONResponse(
+            status_code=404,
+            content={
+                "status": "not_found",
+                "message": "No CUDA visual frame has been rendered yet.",
+            },
+        )
+
+    return FileResponse(
+        path=visual_lab_runner.latest_image_path,
+        media_type="image/bmp",
+        filename="live-mandelbrot.bmp",
     )

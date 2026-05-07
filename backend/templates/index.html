@@ -14,7 +14,7 @@
         <h1>CUDA Ops Dashboard</h1>
         <p class="sub">
           Live GPU telemetry, CUDA workload testing, process monitoring, custom CUDA kernel execution,
-          and infra-style observability.
+          and a basic live CUDA visual generator.
         </p>
       </div>
     </header>
@@ -30,6 +30,10 @@
 
       <button class="tab-button" id="kernelTabButton" onclick="setTab('kernel')">
         CUDA Kernel Lab
+      </button>
+
+      <button class="tab-button" id="visualTabButton" onclick="setTab('visual')">
+        CUDA Visual Lab
       </button>
     </nav>
 
@@ -261,7 +265,7 @@
             </p>
 
             <ul id="vectorHumanBullets" class="insight-list">
-              <li>This lab runs GPU code wrote in CUDA C++.</li>
+              <li>This lab runs GPU code you wrote in CUDA C++.</li>
               <li>Each CUDA thread is responsible for adding one array element.</li>
               <li>The result is verified for correctness after the GPU finishes.</li>
             </ul>
@@ -336,6 +340,122 @@
         </div>
       </section>
     </section>
+
+    <section id="visualTab" class="tab-content">
+      <section class="device-layout">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">CUDA Visual Lab</p>
+              <h2>Live Mandelbrot Renderer</h2>
+            </div>
+          </div>
+
+          <p class="note">
+            This lab runs a background CUDA render loop. Each frame assigns one GPU thread per pixel,
+            writes a fresh BMP image, and refreshes that image in the browser.
+          </p>
+
+          <div class="insight-panel">
+            <p class="eyebrow">Human Summary</p>
+            <h3 id="visualHumanTitle">Ready to run a live CUDA visual</h3>
+            <p id="visualHumanMessage">
+              Start the live renderer to generate Mandelbrot fractal frames on the GPU.
+              The browser will keep refreshing the latest CUDA-generated image.
+            </p>
+
+            <ul id="visualHumanBullets" class="insight-list">
+              <li>Each pixel is computed by a CUDA thread.</li>
+              <li>The backend runs a render loop and serves the newest frame to the browser.</li>
+              <li>This is a basic live visual generator intended to stay simple and easy to reason about.</li>
+            </ul>
+          </div>
+
+          <div class="controls visual-controls">
+            <label>
+              Width
+              <input id="visualWidth" type="number" min="320" max="1920" step="32" value="960">
+            </label>
+
+            <label>
+              Height
+              <input id="visualHeight" type="number" min="240" max="1080" step="32" value="540">
+            </label>
+
+            <label>
+              Max Iterations
+              <input id="visualIterations" type="number" min="64" max="5000" step="32" value="500">
+            </label>
+
+            <label>
+              Zoom Multiplier
+              <input id="visualZoomMultiplier" type="number" min="1.001" max="1.5" step="0.001" value="1.08">
+            </label>
+
+            <label>
+              Frame Delay (ms)
+              <input id="visualIntervalMs" type="number" min="100" max="5000" step="50" value="750">
+            </label>
+
+            <button id="startVisualButton" onclick="startVisualLab()">Start Live Visual</button>
+            <button id="stopVisualButton" class="danger" onclick="stopVisualLab()">Stop Visual</button>
+          </div>
+
+          <div class="status-grid">
+            <div>
+              <span>Status</span>
+              <strong id="visualRunState">Idle</strong>
+            </div>
+
+            <div>
+              <span>Frame Count</span>
+              <strong id="visualFrameCount">0</strong>
+            </div>
+
+            <div>
+              <span>Current Zoom</span>
+              <strong id="visualCurrentZoom">N/A</strong>
+            </div>
+
+            <div>
+              <span>Last Render</span>
+              <strong id="visualLastRender">N/A</strong>
+            </div>
+          </div>
+
+          <div class="status-grid">
+            <div>
+              <span>Image Size</span>
+              <strong id="visualImageSize">N/A</strong>
+            </div>
+
+            <div>
+              <span>Pixels</span>
+              <strong id="visualPixels">N/A</strong>
+            </div>
+
+            <div>
+              <span>Blocks</span>
+              <strong id="visualBlocks">N/A</strong>
+            </div>
+
+            <div>
+              <span>Threads / Block</span>
+              <strong id="visualThreads">N/A</strong>
+            </div>
+          </div>
+
+          <div class="image-stage">
+            <img id="visualPreview" alt="CUDA live visual preview" />
+            <div id="visualPlaceholder" class="placeholder-copy">
+              No CUDA frame yet. Start the live visual generator.
+            </div>
+          </div>
+
+          <pre id="visualOutput" class="console">Waiting to run CUDA live visual generator...</pre>
+        </div>
+      </section>
+    </section>
   </main>
 
 <script>
@@ -353,10 +473,12 @@ function setTab(tabName) {
   document.getElementById("dashboardTab").classList.remove("active");
   document.getElementById("processTab").classList.remove("active");
   document.getElementById("kernelTab").classList.remove("active");
+  document.getElementById("visualTab").classList.remove("active");
 
   document.getElementById("dashboardTabButton").classList.remove("active");
   document.getElementById("processTabButton").classList.remove("active");
   document.getElementById("kernelTabButton").classList.remove("active");
+  document.getElementById("visualTabButton").classList.remove("active");
 
   if (tabName === "dashboard") {
     document.getElementById("dashboardTab").classList.add("active");
@@ -372,6 +494,12 @@ function setTab(tabName) {
   if (tabName === "kernel") {
     document.getElementById("kernelTab").classList.add("active");
     document.getElementById("kernelTabButton").classList.add("active");
+  }
+
+  if (tabName === "visual") {
+    document.getElementById("visualTab").classList.add("active");
+    document.getElementById("visualTabButton").classList.add("active");
+    refreshVisualLabStatus();
   }
 }
 
@@ -796,16 +924,217 @@ async function runVectorAddLab() {
   }
 }
 
+function updateVisualHumanSummary(data) {
+  const title = document.getElementById("visualHumanTitle");
+  const message = document.getElementById("visualHumanMessage");
+  const bullets = document.getElementById("visualHumanBullets");
+
+  const result = data.last_result || {};
+
+  if (data.status === "build_required") {
+    title.textContent = "Live CUDA renderer needs to be built first";
+    message.textContent = data.message || "The mandelbrot executable was not found.";
+
+    bullets.innerHTML = `
+      <li>Build the visual lab from <code>cuda_labs/mandelbrot</code> using <code>make</code>.</li>
+      <li>The browser UI is ready, but the compiled CUDA executable is missing.</li>
+      <li>Compiled binaries should be rebuilt locally and should not be committed to Git.</li>
+    `;
+    return;
+  }
+
+  if (data.status === "invalid_request") {
+    title.textContent = "The live visual request was rejected";
+    message.textContent = data.message || "One or more visual settings were outside the safe range.";
+
+    bullets.innerHTML = `
+      <li>The backend validates resolution, iteration count, zoom multiplier, and frame delay.</li>
+      <li>This helps prevent accidentally requesting a workload that is too heavy for a simple live demo.</li>
+      <li>Try reducing width, height, or max iterations.</li>
+    `;
+    return;
+  }
+
+  if (data.status === "error" || data.status === "parse_error") {
+    title.textContent = "The live CUDA renderer hit an error";
+    message.textContent = data.last_error || data.message || "The background render loop failed.";
+
+    bullets.innerHTML = `
+      <li>Check the Uvicorn logs and verify the CUDA binary runs manually.</li>
+      <li>The renderer writes a fresh image every frame, so a failure typically means the subprocess or JSON parsing failed.</li>
+      <li>You can test the lab manually from <code>cuda_labs/mandelbrot</code>.</li>
+    `;
+    return;
+  }
+
+  if (data.running && data.frame_count === 0) {
+    title.textContent = "CUDA live visual is starting";
+    message.textContent = "The backend launched the live renderer and is waiting for the first frame to finish.";
+
+    bullets.innerHTML = `
+      <li>The background worker is calling the compiled CUDA renderer in a loop.</li>
+      <li>Each frame produces a fresh BMP image that the browser can display.</li>
+      <li>The first frame may take a moment longer than later frames.</li>
+    `;
+    return;
+  }
+
+  if (data.frame_count > 0) {
+    const width = data.width || 0;
+    const height = data.height || 0;
+    const pixels = result.pixels || data.pixels || 0;
+    const blocksX = result.blocks_x || 0;
+    const blocksY = result.blocks_y || 0;
+    const threadsX = result.threads_x || 0;
+    const threadsY = result.threads_y || 0;
+    const totalThreadsPerBlock = threadsX * threadsY;
+
+    title.textContent = data.running
+      ? "CUDA is actively generating live visual frames"
+      : "CUDA live visual generated one or more frames successfully";
+
+    message.textContent =
+      `The current frame size is ${formatNumber(width)}×${formatNumber(height)}, which is ` +
+      `${formatNumber(pixels)} pixels. The renderer is generating Mandelbrot imagery on the GPU.`;
+
+    bullets.innerHTML = `
+      <li>The current frame used ${formatNumber(blocksX)}×${formatNumber(blocksY)} CUDA blocks.</li>
+      <li>Each block used ${threadsX}×${threadsY} threads, or ${formatNumber(totalThreadsPerBlock)} threads per block.</li>
+      <li>Each CUDA thread computes one pixel in the image.</li>
+      <li>The latest GPU kernel time was ${result.kernel_ms !== undefined ? result.kernel_ms + " ms" : "N/A"}.</li>
+      <li>The latest browser-visible frame count is ${formatNumber(data.frame_count)} and the current zoom is ${data.current_zoom !== null && data.current_zoom !== undefined ? data.current_zoom.toFixed(4) : "N/A"}.</li>
+    `;
+    return;
+  }
+
+  title.textContent = "Ready to run a live CUDA visual";
+  message.textContent = "Start the live renderer to generate Mandelbrot fractal frames on the GPU.";
+
+  bullets.innerHTML = `
+    <li>Each pixel is computed by a CUDA thread.</li>
+    <li>The backend repeatedly renders frames and refreshes the latest browser image.</li>
+    <li>This is intentionally a basic live visual pipeline so it stays easy to understand.</li>
+  `;
+}
+
+async function refreshVisualLabStatus() {
+  try {
+    const res = await fetch("/cuda-visual/status");
+    const data = await res.json();
+    const result = data.last_result || {};
+
+    document.getElementById("visualRunState").textContent =
+      data.running ? "Running" : (data.status || "Idle");
+
+    document.getElementById("visualFrameCount").textContent =
+      formatNumber(data.frame_count);
+
+    document.getElementById("visualCurrentZoom").textContent =
+      data.current_zoom !== null && data.current_zoom !== undefined
+        ? Number(data.current_zoom).toFixed(4)
+        : "N/A";
+
+    document.getElementById("visualLastRender").textContent =
+      data.last_render_seconds !== null && data.last_render_seconds !== undefined
+        ? `${data.last_render_seconds}s`
+        : "N/A";
+
+    document.getElementById("visualImageSize").textContent =
+      data.width && data.height ? `${formatNumber(data.width)} × ${formatNumber(data.height)}` : "N/A";
+
+    document.getElementById("visualPixels").textContent =
+      result.pixels !== undefined ? formatNumber(result.pixels) : displayValue(data.pixels);
+
+    document.getElementById("visualBlocks").textContent =
+      result.blocks_x !== undefined && result.blocks_y !== undefined
+        ? `${formatNumber(result.blocks_x)} × ${formatNumber(result.blocks_y)}`
+        : "N/A";
+
+    document.getElementById("visualThreads").textContent =
+      result.threads_x !== undefined && result.threads_y !== undefined
+        ? `${result.threads_x} × ${result.threads_y}`
+        : "N/A";
+
+    document.getElementById("visualOutput").textContent =
+      JSON.stringify(data, null, 2);
+
+    document.getElementById("startVisualButton").disabled = data.running;
+    document.getElementById("stopVisualButton").disabled = !data.running;
+
+    updateVisualHumanSummary(data);
+
+    const preview = document.getElementById("visualPreview");
+    const placeholder = document.getElementById("visualPlaceholder");
+
+    if (data.latest_image_exists) {
+      preview.src = `/cuda-visual/latest-image?t=${Date.now()}`;
+      preview.style.display = "block";
+      placeholder.style.display = "none";
+    } else {
+      preview.style.display = "none";
+      placeholder.style.display = "flex";
+    }
+  } catch (error) {
+    document.getElementById("visualRunState").textContent = "error";
+    document.getElementById("visualOutput").textContent = error.toString();
+  }
+}
+
+async function startVisualLab() {
+  const width = document.getElementById("visualWidth").value;
+  const height = document.getElementById("visualHeight").value;
+  const maxIterations = document.getElementById("visualIterations").value;
+  const zoomMultiplier = document.getElementById("visualZoomMultiplier").value;
+  const intervalMs = document.getElementById("visualIntervalMs").value;
+
+  document.getElementById("visualRunState").textContent = "Starting";
+  document.getElementById("visualOutput").textContent =
+    "Starting live CUDA visual generator...";
+
+  try {
+    await fetch(
+      `/cuda-visual/start?width=${width}&height=${height}&max_iterations=${maxIterations}&zoom_multiplier=${zoomMultiplier}&interval_ms=${intervalMs}`,
+      {
+        method: "POST"
+      }
+    );
+
+    await refreshVisualLabStatus();
+    await refreshMetrics();
+  } catch (error) {
+    document.getElementById("visualRunState").textContent = "error";
+    document.getElementById("visualOutput").textContent = error.toString();
+  }
+}
+
+async function stopVisualLab() {
+  try {
+    await fetch("/cuda-visual/stop", {
+      method: "POST"
+    });
+
+    await refreshVisualLabStatus();
+  } catch (error) {
+    document.getElementById("visualRunState").textContent = "error";
+    document.getElementById("visualOutput").textContent = error.toString();
+  }
+}
+
 setInterval(refreshMetrics, 1000);
 
 setInterval(() => {
   if (activeTab === "process") {
     refreshProcessMonitor();
   }
-}, 2000);
+
+  if (activeTab === "visual" || document.getElementById("visualRunState").textContent === "Running") {
+    refreshVisualLabStatus();
+  }
+}, 1500);
 
 refreshMetrics();
 refreshProcessMonitor();
+refreshVisualLabStatus();
 </script>
 </body>
 </html>

@@ -6,6 +6,9 @@ __pycache__/
 node_modules/
 dist/
 
+# Runtime-generated files
+runtime/
+
 # CUDA build artifacts
 cuda_labs/**/*.o
 cuda_labs/**/*.out
@@ -13,3 +16,4 @@ cuda_labs/**/build/
 
 # Compiled CUDA lab binaries
 /cuda_labs/vector_add/vector_add
+/cuda_labs/mandelbrot/mandelbrot
