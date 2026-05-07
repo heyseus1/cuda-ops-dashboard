@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CUDA Ops Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">RTX 3090 Local GPU Lab</p>
+        <h1>CUDA Ops Dashboard</h1>
+        <p class="sub">Live GPU telemetry, CUDA workload testing, and infra-style observability.</p>
+      </div>
+      <button onclick="runBenchmark()">Run GPU Benchmark</button>
+    </header>
+
+    <section class="grid">
+      <div class="card"><span>GPU</span><strong id="gpu">Loading...</strong></div>
+      <div class="card"><span>Utilization</span><strong id="util">0%</strong></div>
+      <div class="card"><span>VRAM</span><strong id="vram">0 MB</strong></div>
+      <div class="card"><span>Temperature</span><strong id="temp">0°C</strong></div>
+      <div class="card"><span>Power</span><strong id="power">0W</strong></div>
+      <div class="card"><span>Benchmark</span><strong id="bench">Idle</strong></div>
+    </section>
+
+    <section class="charts">
+      <div class="panel"><canvas id="utilChart"></canvas></div>
+      <div class="panel"><canvas id="memChart"></canvas></div>
+    </section>
+  </main>
+
+<script>
+const labels = [];
+const utilData = [];
+const memData = [];
+
+function makeChart(id, label) {
+  return new Chart(document.getElementById(id), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{ label, data: id === "utilChart" ? utilData : memData, tension: 0.35 }]
+    },
+    options: {
+      animation: false,
+      scales: { y: { min: 0, max: 100 } },
+      plugins: { legend: { labels: { color: "#e5e7eb" } } }
+    }
+  });
+}
+
+const utilChart = makeChart("utilChart", "GPU Utilization %");
+const memChart = makeChart("memChart", "VRAM Usage %");
+
+async function refreshMetrics() {
+  const res = await fetch("/gpu/metrics");
+  const m = await res.json();
+
+  document.getElementById("gpu").textContent = m.gpu;
+  document.getElementById("util").textContent = `${m.utilization_percent}%`;
+  document.getElementById("vram").textContent = `${m.memory_used_mb} / ${m.memory_total_mb} MB`;
+  document.getElementById("temp").textContent = `${m.temperature_c}°C`;
+  document.getElementById("power").textContent = `${m.power_watts}W`;
+
+  const b = m.benchmark;
+  document.getElementById("bench").textContent =
+    b.running ? "Running..." :
+    b.last_error ? "Error" :
+    b.last_seconds ? `${b.last_seconds}s` :
+    "Idle";
+
+  const now = new Date().toLocaleTimeString();
+
+  labels.push(now);
+  utilData.push(m.utilization_percent);
+  memData.push(m.memory_percent);
+
+  if (labels.length > 30) {
+    labels.shift();
+    utilData.shift();
+    memData.shift();
+  }
+
+  utilChart.update();
+  memChart.update();
+}
+
+async function runBenchmark() {
+  await fetch("/gpu/benchmark?size=12000", { method: "POST" });
+}
+
+setInterval(refreshMetrics, 1000);
+refreshMetrics();
+</script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #1f2937, #020617 55%);
+  color: #e5e7eb;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.eyebrow {
+  color: #22c55e;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: 48px;
+  margin: 0;
+}
+
+.sub {
+  color: #94a3b8;
+}
+
+button {
+  background: #22c55e;
+  color: #020617;
+  border: none;
+  padding: 14px 20px;
+  border-radius: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.card, .panel {
+  background: rgba(15, 23, 42, .82);
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.35);
+}
+
+.card span {
+  color: #94a3b8;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.card strong {
+  font-size: 24px;
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+canvas {
+  max-height: 320px;
+}
